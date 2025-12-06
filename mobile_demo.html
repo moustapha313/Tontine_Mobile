@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tontine — Mobile Demo</title>
+  <style>
+    :root{--bg:#ffffff;--brand:#0b5fff;--muted:#6b7280}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:#111}
+    .container{max-width:480px;margin:0 auto;padding:16px}
+    header{display:flex;align-items:center;gap:12px}
+    h1{font-size:18px;margin:0}
+    .card{background:#fff;border-radius:12px;padding:12px;margin-top:12px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    label{font-size:13px;color:var(--muted);display:block;margin-top:8px}
+    input,select,button{width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #ececec}
+    button{background:var(--brand);color:white;border:none}
+    .row{display:flex;gap:8px}
+    .member-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .member{padding:10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between}
+    .small{font-size:13px;color:var(--muted)}
+    .next{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Tontine — Mobile Demo</h1>
+        <div class="small">Prototype mobile-friendly</div>
+      </div>
+    </header>
+
+    <div class="card">
+      <label>Créer un groupe</label>
+      <div class="row"><input id="gname" placeholder="Nom du groupe" /><button id="gcreate">Créer</button></div>
+      <div id="groups" class="member-list"></div>
+    </div>
+
+    <div class="card">
+      <label>Membres</label>
+      <div class="row"><input id="mname" placeholder="Nom membre" /><button id="madd">Ajouter</button></div>
+      <div id="members" class="member-list"></div>
+    </div>
+
+    <div class="card">
+      <label>Montant cotisation</label>
+      <input id="amount" type="number" placeholder="Ex: 5000" />
+      <label>Prochain bénéficiaire</label>
+      <div class="next" id="nextBox"><div class="small">Aucun cycle démarré</div></div>
+      <div class="row"><button id="startCycle">Démarrer cycle</button><button id="shuffle">Mélanger</button></div>
+    </div>
+
+    <div class="card">
+      <label>Simuler paiement</label>
+      <select id="paySelect"></select>
+      <button id="pay">Enregistrer paiement</button>
+    </div>
+
+  </div>
+
+  <script>
+    // Minimal mobile demo: local-only
+    const storageKey = 'tontine_mobile_demo_v1';
+    let state = { groups: [], selected: null };
+    function uid(){ return Math.random().toString(36).slice(2,9) }
+    function save(){ localStorage.setItem(storageKey, JSON.stringify(state)) }
+    function load(){ const s=localStorage.getItem(storageKey); state = s?JSON.parse(s):{groups:[],selected:null} }
+    load(); renderGroups(); renderMembers(); renderNext();
+
+    document.getElementById('gcreate').onclick = ()=>{ const name = document.getElementById('gname').value.trim(); if(!name) return alert('Nom requis'); const g={id:uid(),name,members:[],contribution:0,cycle:null,payments:[]}; state.groups.push(g); state.selected=g.id; save(); renderGroups(); renderMembers(); document.getElementById('gname').value=''}
+    function renderGroups(){ const el=document.getElementById('groups'); el.innerHTML=''; state.groups.forEach(g=>{ const d=document.createElement('div'); d.className='member'; d.textContent=g.name; d.onclick=()=>{ state.selected=g.id; save(); renderMembers(); renderNext() }; if(state.selected===g.id) d.style.outline='2px solid rgba(11,95,255,0.12)'; el.appendChild(d) }) }
+
+    document.getElementById('madd').onclick = ()=>{ const g = curGroup(); if(!g) return alert('Sélectionnez un groupe'); const name=document.getElementById('mname').value.trim(); if(!name) return alert('Nom requis'); const m={id:uid(),name}; g.members.push(m); save(); renderMembers(); document.getElementById('mname').value='' }
+    function curGroup(){ return state.groups.find(x=>x.id===state.selected) }
+    function renderMembers(){ const g=curGroup(); const el=document.getElementById('members'); el.innerHTML=''; const paySel=document.getElementById('paySelect'); paySel.innerHTML=''; if(!g) return; g.members.forEach(m=>{ const d=document.createElement('div'); d.className='member'; d.innerHTML=`<div>${m.name}</div><div class="small">ID: ${m.id}</div>`; el.appendChild(d); const o=document.createElement('option'); o.value=m.id; o.textContent=m.name; paySel.appendChild(o) }) }
+
+    document.getElementById('startCycle').onclick = ()=>{ const g=curGroup(); if(!g) return alert('Sélectionnez un groupe'); if(g.members.length<2) return alert('Ajoutez au moins 2 membres'); g.cycle = { order: g.members.map(m=>m.id), idx:0 }; save(); renderNext(); }
+    document.getElementById('shuffle').onclick = ()=>{ const g=curGroup(); if(!g||!g.cycle) return alert('Démarrez le cycle'); g.cycle.order.sort(()=>Math.random()-0.5); g.cycle.idx=0; save(); renderNext(); }
+
+    function renderNext(){ const el=document.getElementById('nextBox'); const g=curGroup(); if(!g||!g.cycle){ el.innerHTML='<div class="small">Aucun cycle démarré</div>'; return } const id=g.cycle.order[g.cycle.idx%g.cycle.order.length]; const m=g.members.find(x=>x.id===id); el.innerHTML=`<div style="font-weight:600">${m?m.name:'?'}</div><div class="small">Montant: ${g.contribution||document.getElementById('amount').value||0}</div>` }
+
+    document.getElementById('pay').onclick = ()=>{ const g=curGroup(); if(!g) return alert('Sélectionnez un groupe'); const memberId=document.getElementById('paySelect').value; if(!memberId) return alert('Choisir un membre'); const amount = Number(document.getElementById('amount').value)||0; g.payments.push({id:uid(),memberId,amount,date:Date.now()}); alert('Paiement enregistré (simulé)'); save(); }
+  </script>
+</body>
+</html>
